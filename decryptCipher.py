@@ -46,7 +46,7 @@ print("The character counts are: ")
 print(charFrequencies)
 
 
-# CORRECT KEY : PRTVXJBDFHKLNYWUSZOMCIGEQA
+
 key = input("Enter a possible key: ")
 key = key.lower()
 
