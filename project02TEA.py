@@ -173,36 +173,78 @@ def decrypt_int_list_string(int_list : List[int], key : List[int]):
 
 	return output_string
 
-def generate_initialization_vector(input_list : List[int] | None = None):
+def generate_initialization_vector(size : int):
 	initialization_vector : List[int] = []
 
-	for _ in range(len(input_list)):
+	for _ in range(size):
 		# Generate a random integer between 0 (inclusive) and 2^32 bits - 1 (inclusive, int32 maximum value).
 		initialization_vector.append(random.randint(0, 2^32 - 1))
 
 	return initialization_vector
 
-# TODO: Implement Cipher Block Chaining, more information can be found here: https://en.wikipedia.org/wiki/Block_cipher_mode_of_operation#Cipher_block_chaining_(CBC)
-def encrypt_xor_vector(int_list : List[int], key : List[int], initialization_vector : List[int]):
+# Generates blocks from a single continuous integer list of size 'block_size'.
+def generate_blocks(int_list : List[int], block_size : int):
+	blocks : List[List[int]] = []
+
+	current_block : List[int] = []
+	# Split the input list into n arrays of size 'block_size'.
+	for i in range(len(int_list)):
+		current_block.append(int_list[i])
+		
+		if len(current_block) >= block_size:
+			blocks.append(current_block.copy())
+			current_block = []
+
+	# If we have a unfinished block, pad it to the correct size and append it.
+	if len(current_block) > 0 and (len(current_block) != 1 or current_block[0] != 0):
+		current_block = pad_list(current_block, block_size, 0)
+		blocks.append(current_block.copy())
+
+	return blocks
+
+# Pads a list to be a specified length by appending pad_object's until the correct length multiple is matched.
+def pad_list(list : List, multiple : int, pad_object):
+	while len(list) % multiple != 0:
+		list.append(pad_object)
+
+	return list
+
+# Implementation information can be found here: https://en.wikipedia.org/wiki/Block_cipher_mode_of_operation#Cipher_block_chaining_(CBC)
+def encrypt_xor_vector(int_list : List[int], key : List[int], xor_list : List[int]):
 	# Check that the input int_list and the initialization_vector have the same length.
-	if len(int_list) != len(initialization_vector):
-		raise ValueError("The int_list and initialization_vector parameters had differing lengths. " + str(len(int_list)) + " != " + str(len(initialization_vector)))
+	if len(int_list) != len(xor_list):
+		raise ValueError("The int_list and initialization_vector parameters had differing lengths. " + str(len(int_list)) + " != " + str(len(xor_list)))
 
 	xored_list : List[int] = []
 
 	for i in range(len(int_list)):
 		# ^ in Python is XOR, see https://docs.python.org/3/library/operator.html#mapping-operators-to-functions
-		xored_list.append(int_list[i] ^ initialization_vector[i])
-		# print(str(int_list[i]))
-		# print(str(initialization_vector[i]))
-		# print(str(int_list[i] ^ initialization_vector[i]))
-	
+		xored_list.append(int_list[i] ^ xor_list[i])
+
 	return encrypt_int_list(xored_list, key=key)
 
-def decrypt_xor_vector(int_list : List[int], key : List[int], initialization_vector : List[int]):
+def cipher_block_chaining_encrypt(int_list : List[int], key : List[int], initialization_vector : List[int], block_size : int):
+	int_list = pad_list(int_list, 2, 0)
+
+	blocks = generate_blocks(int_list=int_list, block_size=block_size)
+
+	encrypted_int_list : List[int] = []
+	xor_list = initialization_vector.copy()
+
+	for block in blocks:
+		new_encrypted_block = encrypt_xor_vector(int_list=block, key=key, xor_list=xor_list)
+
+		for integer in new_encrypted_block:
+			encrypted_int_list.append(integer)
+
+		xor_list = new_encrypted_block
+
+	return encrypted_int_list
+
+def decrypt_xor_vector(int_list : List[int], key : List[int], xor_list : List[int]):
 	# Check that the input int_list and the initialization_vector have the same length.
-	if len(int_list) != len(initialization_vector):
-		raise ValueError("The int_list and initialization_vector parameters had differing lengths. " + str(len(int_list)) + " != " + str(len(initialization_vector)))
+	if len(int_list) != len(xor_list):
+		raise ValueError("The int_list and initialization_vector parameters had differing lengths. " + str(len(int_list)) + " != " + str(len(xor_list)))
 
 	xored_list : List[int] = []
 
@@ -210,12 +252,27 @@ def decrypt_xor_vector(int_list : List[int], key : List[int], initialization_vec
 
 	for i in range(len(decrypted_int_list)):
 		# ^ in Python is XOR, see https://docs.python.org/3/library/operator.html#mapping-operators-to-functions
-		xored_list.append(decrypted_int_list[i] ^ initialization_vector[i])
-		# print(str(decrypted_int_list[i]))
-		# print(str(initialization_vector[i]))
-		# print(str(decrypted_int_list[i] ^ initialization_vector[i]))
+		xored_list.append(decrypted_int_list[i] ^ xor_list[i])
 
 	return xored_list
+
+def cipher_block_chaining_decrypt(int_list : List[int], key : List[int], initialization_vector : List[int], block_size : int):
+	int_list = pad_list(int_list, 2, 0)
+
+	blocks = generate_blocks(int_list=int_list, block_size=block_size)
+
+	decrypted_int_list : List[int] = []
+	xor_list = initialization_vector.copy()
+
+	for block in blocks:
+		new_decrypted_block = decrypt_xor_vector(int_list=block, key=key, xor_list=xor_list)
+
+		for integer in new_decrypted_block:
+			decrypted_int_list.append(integer)
+
+		xor_list = block
+
+	return decrypted_int_list
 
 def test_string_encryption():
 	key = [2194012, 1290311, 591021, 952112]
@@ -246,25 +303,45 @@ def test_value_key_encryption():
 	decrypted_array = decrypt(encrypted_array, key)
 	print("Decrypted Value: " + str(decrypted_array))
 
-def pad_list(list : List, multiple : int, pad_object):
-	while len(list) % multiple != 0:
-		list.append(pad_object)
-
-	return list
-
-def main():
+def test_manual_cipher_block_chaining():
 	key = [2194012, 1290311, 591021, 952112]
 
 	int_list = pad_list(string_to_int_list("this is a test."), 2, 0)
 	print("Int List: " + str(int_list))
 
-	initialization_vector = generate_initialization_vector(int_list)
+	initialization_vector = generate_initialization_vector(len(int_list))
 
 	encrypted_xor_vector = encrypt_xor_vector(int_list, key, initialization_vector)
 	print(str("Encrypted Xor Vector: " + str(encrypted_xor_vector)))
 
 	decrypted_xor_vector = decrypt_xor_vector(encrypted_xor_vector, key, initialization_vector)
 	print(str("Decrypted Xor Vector: " + str(decrypted_xor_vector)))
+
+def test_cipher_block_chaining():
+	key = [2194012, 1290311, 591021, 952112]
+	block_size = 5
+
+	# Block size must be a multiple of two as required by the TEA algorithm. I tried to implement odd-sized block sizes, but ran into some significant issues (while forcing this requirement made my code work instantly). There are ways around this, but didn't seem worth implementing for Cipher Block Chaining due to this requirement in the original algorithm and the fact that most cryptographic algorithms do not support odd-bit block sizes.
+	if block_size % 2 != 0:
+		block_size += 1
+
+	int_list = pad_list(string_to_int_list("this is a test."), 2, 0)
+	print("Int List: " + str(int_list))
+	print("Int List Length: " + str(len(int_list)))
+	print("Blocks for Int List: " + str(generate_blocks(int_list=int_list, block_size=block_size)))
+
+	initialization_vector = generate_initialization_vector(block_size)
+
+	encrypted_int_list = cipher_block_chaining_encrypt(int_list, key, initialization_vector, block_size)
+	print("Encrypted Int List: " + str(encrypted_int_list))
+	print("Encrypted Int List Length: " + str(len(encrypted_int_list)))
+
+	decrypted_int_list = cipher_block_chaining_decrypt(encrypted_int_list, key, initialization_vector, block_size)
+	print("Decrypted Int List: " + str(decrypted_int_list))
+	print("Decrypted Int List Length: " + str(len(decrypted_int_list)))
+
+def main():
+	test_cipher_block_chaining()
 
 if __name__ == "__main__":
 	main()
