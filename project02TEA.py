@@ -5,6 +5,7 @@ import random
 delta = 0x9E3779B9
 decrypt_sum = 0xC6EF3720
 maximum_displayed_int_list_elements = 10
+limit_encryption_to_hex = True
 
 # Set the seed of random to 0, making all initialization vectors generation deterministic.
 random.seed(0)
@@ -105,6 +106,17 @@ def string_to_int_list(string : str):
 		int_list.append(ord(char))
 
 	return int_list
+
+# Converts a string to an int list.
+def int_list_to_string(int_list : List[int]):
+	# TODO: Should use a StringBuilder-like object to speed this up. See https://stackoverflow.com/questions/10572624/mutable-strings-in-python/10572792#10572792
+	output_string = ""
+
+	# Append the ordinal of each character in the string. This will be at-most 32 bits for a 4 byte Unicode character.
+	for integer in int_list:
+		output_string += chr(integer)
+
+	return output_string
 
 # Will take a string and encrypt the Unicode-chars bytes.
 def encrypt_string(string : str, key : List[int]):
@@ -210,6 +222,7 @@ def pad_list(list : List, multiple : int, pad_object):
 	return list
 
 # Implementation information can be found here: https://en.wikipedia.org/wiki/Block_cipher_mode_of_operation#Cipher_block_chaining_(CBC)
+# Encrypt an integer list given a key and a xor list. First, the integer list is xored using the xor list, then encrypted using the TEA algorithm.
 def encrypt_xor_vector(int_list : List[int], key : List[int], xor_list : List[int]):
 	# Check that the input int_list and the initialization_vector have the same length.
 	if len(int_list) != len(xor_list):
@@ -223,6 +236,7 @@ def encrypt_xor_vector(int_list : List[int], key : List[int], xor_list : List[in
 
 	return encrypt_int_list(xored_list, key=key)
 
+# Encrypt an integer list using CBC given a key, an initial initialization vector, and a block size.
 def cipher_block_chaining_encrypt(int_list : List[int], key : List[int], initialization_vector : List[int], block_size : int):
 	int_list = pad_list(int_list, 2, 0)
 
@@ -231,6 +245,7 @@ def cipher_block_chaining_encrypt(int_list : List[int], key : List[int], initial
 	encrypted_int_list : List[int] = []
 	xor_list = initialization_vector.copy()
 
+	# For every block, encrypt the integers in the block using the key, then xor with the xor list (which will either be the initialization vector or the previously encrypted block).
 	for block in blocks:
 		new_encrypted_block = encrypt_xor_vector(int_list=block, key=key, xor_list=xor_list)
 
@@ -241,6 +256,7 @@ def cipher_block_chaining_encrypt(int_list : List[int], key : List[int], initial
 
 	return encrypted_int_list
 
+# Decrypt an integer list given a key and a xor list. First, the integer list is decrypted using the key, then xored with the xor list.
 def decrypt_xor_vector(int_list : List[int], key : List[int], xor_list : List[int]):
 	# Check that the input int_list and the initialization_vector have the same length.
 	if len(int_list) != len(xor_list):
@@ -256,6 +272,7 @@ def decrypt_xor_vector(int_list : List[int], key : List[int], xor_list : List[in
 
 	return xored_list
 
+# Decrypt an integer list using CBC given a key, an initial initialization vector, and a block size.
 def cipher_block_chaining_decrypt(int_list : List[int], key : List[int], initialization_vector : List[int], block_size : int):
 	int_list = pad_list(int_list, 2, 0)
 
@@ -264,6 +281,7 @@ def cipher_block_chaining_decrypt(int_list : List[int], key : List[int], initial
 	decrypted_int_list : List[int] = []
 	xor_list = initialization_vector.copy()
 
+	# For every block, decrypt the integers in the block by xoring with the list (which will either be the initialization vector or the previously encrypted block), then using the key to decrypt.
 	for block in blocks:
 		new_decrypted_block = decrypt_xor_vector(int_list=block, key=key, xor_list=xor_list)
 
@@ -341,7 +359,27 @@ def test_cipher_block_chaining():
 	print("Decrypted Int List Length: " + str(len(decrypted_int_list)))
 
 def main():
-	test_cipher_block_chaining()
+	inputs = ["0x0123456789ABCDEF", "Privacy - like eating and breather - is one of life's basic requirements."]
+
+	for input in inputs:
+		key = [0xA56BABCD, 0x00000000, 0xFFFFFFFF, 0xABCDEF01]
+		block_size = 8
+
+		# Generate an initialization vector set to the block size for the encryption.
+		initialization_vector = generate_initialization_vector(block_size)
+
+		print("Input: " + input)
+		print()
+
+		# Encrypt the plaintext using the given key with a block size of 8 bytes.
+		encrypted_int_list = cipher_block_chaining_encrypt(string_to_int_list(input), key, initialization_vector, block_size)
+		print("Cipher Block Chaining Mode: ")
+		print("Encrypted Message: " + str(encrypted_int_list))
+
+		decrypted_int_list = cipher_block_chaining_decrypt(encrypted_int_list, key, initialization_vector, block_size)
+		print("Decrypted Message: " + int_list_to_string(decrypted_int_list))
+		print()
+
 
 if __name__ == "__main__":
 	main()
