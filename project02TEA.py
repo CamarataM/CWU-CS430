@@ -1,8 +1,13 @@
 import ctypes
 from typing import List
+import random
 
 delta = 0x9E3779B9
+decrypt_sum = 0xC6EF3720
 maximum_displayed_int_list_elements = 10
+
+# Set the seed of random to 0, making all initialization vectors generation deterministic.
+random.seed(0)
 
 # 'int' in Python is a traditional 32 bit machine value which is automatically promoted to a 64 bit machine value, which is finally promoted to a "infinite" length value. This behavior is extremely different from the original C uint32_t value, making the original code incompatible without converting to a representation which replicates the original C value. ctypes.c_uint32 will convert a Python number into the corresponding c_uint32 (unsigned 32 bit integer), which allows for the replication of the original C behavior.
 def uint32_cast(number : int):
@@ -79,7 +84,7 @@ def encrypt(v : List[int], k : List[int]):
 
 def decrypt(v : List[int], k : List[int]):
 	v0, v1 = UInt32(v[0]), UInt32(v[1])
-	sum = UInt32(0xC6EF3720)
+	sum = UInt32(decrypt_sum)
 
 	k0, k1, k2, k3 = k[0], k[1], k[2], k[3]
 
@@ -91,15 +96,19 @@ def decrypt(v : List[int], k : List[int]):
 	# Return a new array with the Python-version of the numbers from the UInt32's.
 	return [v0.number, v1.number]
 
-# Will take a string and encrypt the Unicode-chars bytes.
-def encrypt_string(string : str, key : List[int]):
+# Converts a string to an int list.
+def string_to_int_list(string : str):
 	int_list = []
 
 	# Append the ordinal of each character in the string. This will be at-most 32 bits for a 4 byte Unicode character.
 	for char in string:
 		int_list.append(ord(char))
 
-	return encrypt_int_list(int_list=int_list, key=key)
+	return int_list
+
+# Will take a string and encrypt the Unicode-chars bytes.
+def encrypt_string(string : str, key : List[int]):
+	return encrypt_int_list(int_list=string_to_int_list(string=string), key=key)
 
 # Will take an int list and encrypt the values using the key parameter.
 def encrypt_int_list(int_list : List[int], key : List[int]):
@@ -108,7 +117,7 @@ def encrypt_int_list(int_list : List[int], key : List[int]):
 	for i in range(0, len(int_list), 2):
 		# Iterate every int, only grabbing the second int if it is not our-of-bounds for the int list.
 		first_int = int_list[i]
-		second_int = -1
+		second_int = 0
 
 		if i + 1 < len(int_list):
 			second_int = int_list[i + 1]
@@ -116,22 +125,20 @@ def encrypt_int_list(int_list : List[int], key : List[int]):
 		# Encrypt the bytes using the key parameter.
 		encrypted_int_tuple = encrypt([first_int, second_int], key)
 
-		# Append the encrypted int(s) to the encrypted int list.
+		# Append the encrypted ints to the encrypted int list.
 		encrypted_int_list.append(encrypted_int_tuple[0])
-		if second_int != -1:
-			encrypted_int_list.append(encrypted_int_tuple[1])
+		encrypted_int_list.append(encrypted_int_tuple[1])
 
 	return encrypted_int_list
 
-def decrypt_int_list_string(int_list : List[List[int]], key : List[int]):
-	# TODO: Should use a StringBuilder-like object to speed this up. See https://stackoverflow.com/questions/10572624/mutable-strings-in-python/10572792#10572792
-	output_string = ""
+def decrypt_int_list(int_list : List[int], key : List[int]):
+	decrypted_int_list = []
 
 	for i in range(0, len(int_list), 2):
 		# Iterate every int, only grabbing the second int if it is not our-of-bounds for the int list.
 		# TODO: Ensure that integers are 32 bits, as larger values will decode incorrectly.
 		first_int = int_list[i]
-		second_int = -1
+		second_int = 0
 
 		if i + 1 < len(int_list):
 			second_int = int_list[i + 1]
@@ -139,16 +146,78 @@ def decrypt_int_list_string(int_list : List[List[int]], key : List[int]):
 		# Decrypt the ints using the key parameter.
 		decrypted_int_tuple = decrypt([first_int, second_int], key)
 
+		# Append the decrypted ints converted back to a char to the output string.
+		decrypted_int_list.append(decrypted_int_tuple[0])
+		decrypted_int_list.append(decrypted_int_tuple[1])
+
+	return decrypted_int_list
+
+def decrypt_int_list_string(int_list : List[int], key : List[int]):
+	# TODO: Should use a StringBuilder-like object to speed this up. See https://stackoverflow.com/questions/10572624/mutable-strings-in-python/10572792#10572792
+	output_string = ""
+
+	decrypted_int_list = decrypt_int_list(int_list=int_list, key=key)
+
+	for i in range(0, len(int_list), 2):
+		# Iterate every int, only grabbing the second int if it is not our-of-bounds for the int list.
+		# TODO: Ensure that integers are 32 bits, as larger values will decode incorrectly.
+		first_int = decrypted_int_list[i]
+		second_int = 0
+
+		if i + 1 < len(decrypted_int_list):
+			second_int = decrypted_int_list[i + 1]
+
 		# Append the decrypted int(s) converted back to a char to the output string.
-		output_string += chr(decrypted_int_tuple[0])
-		if second_int != -1:
-			output_string += chr(decrypted_int_tuple[1])
+		output_string += chr(first_int)
+		output_string += chr(second_int)
 
 	return output_string
 
+def generate_initialization_vector(input_list : List[int] | None = None):
+	initialization_vector : List[int] = []
+
+	for _ in range(len(input_list)):
+		# Generate a random integer between 0 (inclusive) and 2^32 bits - 1 (inclusive, int32 maximum value).
+		initialization_vector.append(random.randint(0, 2^32 - 1))
+
+	return initialization_vector
+
 # TODO: Implement Cipher Block Chaining, more information can be found here: https://en.wikipedia.org/wiki/Block_cipher_mode_of_operation#Cipher_block_chaining_(CBC)
-def main():
-	value = [1839219, 1240194]
+def encrypt_xor_vector(int_list : List[int], key : List[int], initialization_vector : List[int]):
+	# Check that the input int_list and the initialization_vector have the same length.
+	if len(int_list) != len(initialization_vector):
+		raise ValueError("The int_list and initialization_vector parameters had differing lengths. " + str(len(int_list)) + " != " + str(len(initialization_vector)))
+
+	xored_list : List[int] = []
+
+	for i in range(len(int_list)):
+		# ^ in Python is XOR, see https://docs.python.org/3/library/operator.html#mapping-operators-to-functions
+		xored_list.append(int_list[i] ^ initialization_vector[i])
+		# print(str(int_list[i]))
+		# print(str(initialization_vector[i]))
+		# print(str(int_list[i] ^ initialization_vector[i]))
+	
+	return encrypt_int_list(xored_list, key=key)
+
+def decrypt_xor_vector(int_list : List[int], key : List[int], initialization_vector : List[int]):
+	# Check that the input int_list and the initialization_vector have the same length.
+	if len(int_list) != len(initialization_vector):
+		raise ValueError("The int_list and initialization_vector parameters had differing lengths. " + str(len(int_list)) + " != " + str(len(initialization_vector)))
+
+	xored_list : List[int] = []
+
+	decrypted_int_list = decrypt_int_list(int_list, key=key)
+
+	for i in range(len(decrypted_int_list)):
+		# ^ in Python is XOR, see https://docs.python.org/3/library/operator.html#mapping-operators-to-functions
+		xored_list.append(decrypted_int_list[i] ^ initialization_vector[i])
+		# print(str(decrypted_int_list[i]))
+		# print(str(initialization_vector[i]))
+		# print(str(decrypted_int_list[i] ^ initialization_vector[i]))
+
+	return xored_list
+
+def test_string_encryption():
 	key = [2194012, 1290311, 591021, 952112]
 
 	string_to_encrypt = "Corrupti repudiandae sit consequatur voluptate accusamus sit fugiat. Vel perspiciatis quo rerum iure necessitatibus. Animi consequatur accusamus consequatur asperiores aut. Magnam ipsam sit error ducimus tempore quis. Aut dolorem modi voluptatem veritatis porro libero corrupti."
@@ -163,6 +232,10 @@ def main():
 	print("Decrypted Int Array: " + decrypted_string)
 	print("Is Encrypted String and Decrypted String Equal: " + str(string_to_encrypt == decrypted_string))
 
+def test_value_key_encryption():
+	value = [1839219, 1240194]
+	key = [2194012, 1290311, 591021, 952112]
+
 	print("Value: " + str(value))
 	print("Key: " + str(key))
 	print()
@@ -172,6 +245,26 @@ def main():
 
 	decrypted_array = decrypt(encrypted_array, key)
 	print("Decrypted Value: " + str(decrypted_array))
+
+def pad_list(list : List, multiple : int, pad_object):
+	while len(list) % multiple != 0:
+		list.append(pad_object)
+
+	return list
+
+def main():
+	key = [2194012, 1290311, 591021, 952112]
+
+	int_list = pad_list(string_to_int_list("this is a test."), 2, 0)
+	print("Int List: " + str(int_list))
+
+	initialization_vector = generate_initialization_vector(int_list)
+
+	encrypted_xor_vector = encrypt_xor_vector(int_list, key, initialization_vector)
+	print(str("Encrypted Xor Vector: " + str(encrypted_xor_vector)))
+
+	decrypted_xor_vector = decrypt_xor_vector(encrypted_xor_vector, key, initialization_vector)
+	print(str("Decrypted Xor Vector: " + str(decrypted_xor_vector)))
 
 if __name__ == "__main__":
 	main()
