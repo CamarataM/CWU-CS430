@@ -2,6 +2,7 @@ import ctypes
 from typing import List
 
 delta = 0x9E3779B9
+maximum_displayed_int_list_elements = 10
 
 # 'int' in Python is a traditional 32 bit machine value which is automatically promoted to a 64 bit machine value, which is finally promoted to a "infinite" length value. This behavior is extremely different from the original C uint32_t value, making the original code incompatible without converting to a representation which replicates the original C value. ctypes.c_uint32 will convert a Python number into the corresponding c_uint32 (unsigned 32 bit integer), which allows for the replication of the original C behavior.
 def uint32_cast(number : int):
@@ -90,10 +91,77 @@ def decrypt(v : List[int], k : List[int]):
 	# Return a new array with the Python-version of the numbers from the UInt32's.
 	return [v0.number, v1.number]
 
+# Will take a string and encrypt the Unicode-chars bytes.
+def encrypt_string(string : str, key : List[int]):
+	int_list = []
+
+	# Append the ordinal of each character in the string. This will be at-most 32 bits for a 4 byte Unicode character.
+	for char in string:
+		int_list.append(ord(char))
+
+	return encrypt_int_list(int_list=int_list, key=key)
+
+# Will take an int list and encrypt the values using the key parameter.
+def encrypt_int_list(int_list : List[int], key : List[int]):
+	encrypted_int_list = []
+
+	for i in range(0, len(int_list), 2):
+		# Iterate every int, only grabbing the second int if it is not our-of-bounds for the int list.
+		first_int = int_list[i]
+		second_int = -1
+
+		if i + 1 < len(int_list):
+			second_int = int_list[i + 1]
+
+		# Encrypt the bytes using the key parameter.
+		encrypted_int_tuple = encrypt([first_int, second_int], key)
+
+		# Append the encrypted int(s) to the encrypted int list.
+		encrypted_int_list.append(encrypted_int_tuple[0])
+		if second_int != -1:
+			encrypted_int_list.append(encrypted_int_tuple[1])
+
+	return encrypted_int_list
+
+def decrypt_int_list_string(int_list : List[List[int]], key : List[int]):
+	# TODO: Should use a StringBuilder-like object to speed this up. See https://stackoverflow.com/questions/10572624/mutable-strings-in-python/10572792#10572792
+	output_string = ""
+
+	for i in range(0, len(int_list), 2):
+		# Iterate every int, only grabbing the second int if it is not our-of-bounds for the int list.
+		# TODO: Ensure that integers are 32 bits, as larger values will decode incorrectly.
+		first_int = int_list[i]
+		second_int = -1
+
+		if i + 1 < len(int_list):
+			second_int = int_list[i + 1]
+
+		# Decrypt the ints using the key parameter.
+		decrypted_int_tuple = decrypt([first_int, second_int], key)
+
+		# Append the decrypted int(s) converted back to a char to the output string.
+		output_string += chr(decrypted_int_tuple[0])
+		if second_int != -1:
+			output_string += chr(decrypted_int_tuple[1])
+
+	return output_string
+
 # TODO: Implement Cipher Block Chaining, more information can be found here: https://en.wikipedia.org/wiki/Block_cipher_mode_of_operation#Cipher_block_chaining_(CBC)
 def main():
 	value = [1839219, 1240194]
 	key = [2194012, 1290311, 591021, 952112]
+
+	string_to_encrypt = "Corrupti repudiandae sit consequatur voluptate accusamus sit fugiat. Vel perspiciatis quo rerum iure necessitatibus. Animi consequatur accusamus consequatur asperiores aut. Magnam ipsam sit error ducimus tempore quis. Aut dolorem modi voluptatem veritatis porro libero corrupti."
+
+	encrypted_string = encrypt_string(string_to_encrypt, key)
+
+	print("String to Encrypt: " + string_to_encrypt)
+	print("Encrypted String Int Array: " + str(encrypted_string[:min(maximum_displayed_int_list_elements, len(encrypted_string))]) + ("" if len(encrypted_string) < maximum_displayed_int_list_elements else "..."))
+
+	decrypted_string = decrypt_int_list_string(encrypted_string, key)
+
+	print("Decrypted Int Array: " + decrypted_string)
+	print("Is Encrypted String and Decrypted String Equal: " + str(string_to_encrypt == decrypted_string))
 
 	print("Value: " + str(value))
 	print("Key: " + str(key))
