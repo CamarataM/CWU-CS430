@@ -376,6 +376,14 @@ def main():
 		print("Cipher Block Chaining Mode: ")
 		print("Encrypted Message: " + str(encrypted_int_list))
 
+		# Convert each integer to a byte array of length 4 to match an int32 conversion. Use big-endian encoding.
+		encrypted_byte_list : List[int] = []
+		for integer in encrypted_int_list:
+			for byte in integer.to_bytes(4, 'big'):
+				encrypted_byte_list.append(byte)
+
+		print("Encrypted Message Bytes: " + str(encrypted_byte_list))
+
 		decrypted_int_list = cipher_block_chaining_decrypt(encrypted_int_list, key, initialization_vector, block_size)
 		print("Decrypted Message: " + int_list_to_string(decrypted_int_list))
 		print()
