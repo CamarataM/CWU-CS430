@@ -359,7 +359,7 @@ def test_cipher_block_chaining():
 	print("Decrypted Int List Length: " + str(len(decrypted_int_list)))
 
 def main():
-	inputs = ["0x0123456789ABCDEF", "Privacy - like eating and breather - is one of life's basic requirements."]
+	inputs = ["0x0123456789ABCDEF", "Privacy - like eating and breather - is one of life's basic requirements.", "Tĥiŝ a ţeƧŦ oƒ UʈＦ⎻𝟾"]
 
 	for input in inputs:
 		key = [0xA56BABCD, 0x00000000, 0xFFFFFFFF, 0xABCDEF01]
@@ -379,7 +379,6 @@ def main():
 		decrypted_int_list = cipher_block_chaining_decrypt(encrypted_int_list, key, initialization_vector, block_size)
 		print("Decrypted Message: " + int_list_to_string(decrypted_int_list))
 		print()
-
 
 if __name__ == "__main__":
 	main()
