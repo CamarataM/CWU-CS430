@@ -41,19 +41,6 @@ int main(int argc, const char* argv[])
 	char temp;
 	char data = 0;
 
-	int dataBytes = 0;
-	while (1)
-	{
-		int x = fscanf(in, "%c", &temp);
-		if (x != 1)
-		{
-			break;
-		}
-		++dataBytes;
-	}
-
-	fseek(in, 0, SEEK_SET);
-
 	//fclose(in);
 	//in = fopen(infname, "r");
 
@@ -71,15 +58,9 @@ int main(int argc, const char* argv[])
 
 	int dataBitsByteReplacement = 2;
 
-	for (int i = 0; i < dataBytes; ++i)
+	int i = 0;
+	while (fscanf(in, "%c", &temp) == 1)
 	{
-		int x = fscanf(in, "%c", &temp);
-		if (x != 1)
-		{
-			fprintf(stderr, "\nError in file %s\n\n", infname);
-			exit(0);
-		}
-
 		if (i >= START_FROM && !inStegoHeader && stegoHeaderIndex == 0) {
 			inStegoHeader = true;
 		}
@@ -92,7 +73,7 @@ int main(int argc, const char* argv[])
 			insertedBitsIndex++;
 
 			// Zero out inserted bits.
-			temp = insertedBitsByteReplacement;
+			//temp = insertedBitsByteReplacement;
 
 			if (insertedBitsIndex >= 27) {
 				inInsertedBits = false;
@@ -124,13 +105,11 @@ int main(int argc, const char* argv[])
 			}
 
 			// Zero out Stego header.
-			temp = stegoHeaderByteReplacement;
+			//temp = stegoHeaderByteReplacement;
 		}
 
 		if (!inInsertedBits && insertedBitsIndex != 0 && !inStegoHeader && stegoHeaderIndex != 0) {
-			fprintf(stderr, "\n1: %i\n", temp);
-			temp = temp & 0x11111111;
-			fprintf(stderr, "\n2: %i\n", temp);
+			temp = temp & 0b11111110;
 
 			//data = data ^ ((temp & 0x1) << shft);
 			//++shft;
@@ -152,6 +131,8 @@ int main(int argc, const char* argv[])
 		}
 
 		fprintf(outdata, "%c", temp);
+
+		i++;
 	}
 
 	printf("\n");
